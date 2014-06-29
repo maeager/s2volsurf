@@ -1,0 +1,99 @@
+# EXAMPLE.TXT
+#
+# Copyright 2012 David G. Barnes
+#
+# This file is part of S2VOLSURF.
+#
+# S2VOLSURF is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, either version 3 of the License,
+# or (at your option) any later version.
+#
+# S2VOLSURF is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with S2VOLSURF.  If not, see <http://www.gnu.org/licenses/>. 
+#
+# We would appreciate it if research outcomes using S2VOLSURF would
+# provide the following acknowledgement:
+#
+# "Three-dimensional visualisation was conducted with the S2PLOT
+# progamming library"
+#
+# and a reference to
+#
+# D.G.Barnes, C.J.Fluke, P.D.Bourke & O.T.Parry, 2006, Publications
+# of the Astronomical Society of Australia, 23(2), 82-93.
+#
+# $Id: EXAMPLE.TXT 78 2012-11-26 22:41:06Z barnesd $
+#
+#
+
+Follow the instructions below to see the xrw2pdf tool in action,
+producing a volume-rendered PDF figure of a NIFTI image, with an 
+isosurface overlaid.
+
+1. fetch the example NIFTI image "avg152T1_LR_nifti.nii.gz" from this
+   site: http://nifti.nimh.nih.gov/nifti-1/data
+
+   curl -o avg152T1.nii.gz http://nifti.nimh.nih.gov/nifti-1/data/avg152T1_LR_nifti.nii.gz 
+
+2. convert the NIFTI image to an XRW-format volume:
+
+   nifti2xrw -f avg152T1.nii.gz -o avg152T1.xrw
+
+3. [optional] display a summary of the XRW-format volume:
+
+   xrwinfo avg152T1.xrw
+
+4. [optional] display a histogram of the XRW-format volume:
+
+   xrwhisto avg152T1.xrw 
+
+5. run xrw2pdf to render the volume:
+
+   xrw2pdf -f avg152T1.xrw -z -c hotiron -d 0 0.1 -a 0 0.2 -DX
+
+   #  -z = calculated and render scalar volume derivative;
+   #  -c hotiron = use hotiron colourmap
+   #  -d 0 0.1 = map data range [0,0.1] to colourmap
+   #  -a 0 0.2 = apply opacity ramp [0,0.2] across colourmap
+   #  -DX = clip data outside data range [0,0.1] 
+
+   Press Shift-B (to enable PDF-compatible volume rendering)
+
+   Press Shift-P to save PRC and PDF figure
+
+6. Press Shift-Q to quit the xrw2pdf program
+
+7. To add an isosurface to the visualisation:
+
+   xrw2stl -f avg152T1.xrw -o avg152T1.stl -l 0.8
+
+   # -l 0.8 = set isosurface level 0.8
+
+   xrw2pdf -f avg152T1.xrw -d 0.05 0.2 -a 0.0 0.2 -DX -o avg152T1.stl SurfName 0 0.5 1 1 -x
+
+   # -o avg152T1.stl SurfName 0 0.5 1 1 = add the surface in avg152T1.stl, name it SurfName in
+             the model tree, colour it blue-green, opaque
+   # -x = don't draw the world box
+
+   # and again press Shift-B to enabled PDF-compatible VR, Shift-P to save a
+   # new PRC and PDF figure, and Shift-Q to quit.
+
+The output files, written to the current working directory, are:
+
+* s2direct.prc: PRC-format (binary) 3-d figure for embedding in LaTeX
+  with movie15.sty or media9.sty and pdflatex.
+
+* s2direct.map: text-format summary of the model components (can be
+  used by downstream programs/scripts to create custom interactions 
+  and views in PDF figures created with pdflatex.
+
+* s2plotprc.pdf: quick-look PDF figure.
+
+
+
