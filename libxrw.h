@@ -49,6 +49,8 @@ typedef struct {
    unsigned char blue[256];  // blue
 } XRAW_STRUCT;
 XRAW_STRUCT *loadXraw(char *fname);
+XRAW_STRUCT *preloadXraw(char *fname); // just metadata
+XRAW_STRUCT *trimXraw(XRAW_STRUCT *xr, int trim[3]);
 void showXraw(XRAW_STRUCT *xr);
 int saveXraw(XRAW_STRUCT *xr);
 void deleteXraw(XRAW_STRUCT *xr);
@@ -66,6 +68,7 @@ typedef struct {
 VOL_STRUCT *Xraw2Xvol(XRAW_STRUCT *xrs, int stride[3]);
 VOL_STRUCT *makePow2Xvol(VOL_STRUCT *xrv); 
 void showXvol(VOL_STRUCT *xv);
+void deleteXvol(VOL_STRUCT *xv);
 
 VOL_STRUCT *loadUshortRaw(char *ifname, int nx, int ny, int nz);
 VOL_STRUCT *loadTGAstack(char *basename, int startframe, int endframe, int stride);

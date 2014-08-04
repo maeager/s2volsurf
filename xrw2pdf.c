@@ -285,7 +285,7 @@ void cb(double *t, int *kc) {
       ang = DotProduct(pt2, viewdir);
       pt2 = VectorSub(worldverts[wh][0], worldverts[wh][7]); // diagonal
       ang /= Modulus(pt2);
-      NPL = (int)(2.0 * ang * sqrt(_nx[0]*_nx[0]+_ny[0]*_ny[0]+_nz[0]*_nz[0]) );
+      NPL = (int)(2.0 * ang * sqrt((long)_nx[0]*_nx[0]+_ny[0]*_ny[0]+_nz[0]*_nz[0]) );
       
       NPL = NPL / _3d_speed_up;
 
@@ -555,6 +555,7 @@ void usage(char *exename) {
   fprintf(stderr, "usage: %s [options] -f xrwfilename\n", exename);
   fprintf(stderr, " * * * per volume (<= 4) options\n");
   fprintf(stderr, "-s s1 s2 s3    set data averaging along each axis (1 1 1)\n");
+  fprintf(stderr, "-2             force power-of-2 sidelength\n");
   fprintf(stderr, "-d d1 d2       set data min, max (default 0.0 1.0)\n");
   fprintf(stderr, "-a a1 a2       set alpha min, max (default 0.0 0.2)\n");
   fprintf(stderr, "-v v1 v2 v3    set data/alpha scaling per axis\n");
@@ -593,6 +594,7 @@ int main(int argc, char *argv[]) {
   char ifname[MAXNVOL][FNAMELEN+1];
   int havefname[MAXNVOL];
   int stride[MAXNVOL][3];
+  int pow2[MAXNVOL];
   int use_xrw_cmap[MAXNVOL];
   char cmapname[MAXNVOL][FNAMELEN+1];
   int matrix_supplied[MAXNVOL];
@@ -603,6 +605,7 @@ int main(int argc, char *argv[]) {
   for (i = 0; i < MAXNVOL; i++) {
     havefname[i] = 0;
     stride[i][0] = stride[i][1] = stride[i][2] = 1;
+    pow2[i] = 0;
     dmin[i] = 0.0;
     dmax[i] = 1.0;
     amin[i] = 0.0;
@@ -656,6 +659,8 @@ int main(int argc, char *argv[]) {
 	fprintf(stderr, "stride must be at least 1 in each direction!\n");
 	exit(-1);
       }
+    } else if (!strcmp(argv[ic], "-2")) {
+      pow2[NVR-1] = 1;
     } else if (!strcmp(argv[ic], "-d")) {
       dmin[NVR-1] = atof(argv[++ic]);
       dmax[NVR-1] = atof(argv[++ic]);
@@ -823,6 +828,13 @@ int main(int argc, char *argv[]) {
     if (!vol) {
       fprintf(stderr, "Failed to parse data volume.\n");
       return -1;
+    }
+
+    if (pow2[wh]) {
+      VOL_STRUCT *vol2 = makePow2Xvol(vol);
+      VOL_STRUCT *volbak = vol;
+      vol = vol2;
+      deleteXvol(volbak);
     }
     
     if (doDeriv[wh]) {
@@ -1011,7 +1023,6 @@ int main(int argc, char *argv[]) {
     // clip data?
     if (clip_data) {
       int j, k;
-      //#pragma omp parallel for
       for (i = 0; i < nx; i++) {
 	for (j = 0; j < ny; j++) {
 	  for (k = 0; k < nz; k++) {
@@ -1066,9 +1077,10 @@ int main(int argc, char *argv[]) {
       }
       
       float ir, ig, ib, alf, frac;
-      int idx1, idx2, idx, cidx;
+      int idx1, idx2, cidx;
+      long idx;
       int w,h,d;
-      float minaf =9e30, maxaf = -9e30;
+      //float minaf =9e30, maxaf = -9e30;
       //s2qcir(&idx1, &idx2);
       idx1 = 1000 + wh*256;
       idx2 = 1000+wh*256+255;
@@ -1076,11 +1088,12 @@ int main(int argc, char *argv[]) {
       float denom_recip = 1.0 / (dmax[wh] - dmin[wh]);
       unsigned char *bits = (unsigned char *)ss2g3dt(tex3d[wh], &w, &h, &d);
       fprintf(stderr, "3d texture IS %d x %d x %d\n", w, h, d);
-      memset(bits, (unsigned char)0, w*h*d*4);
+      //memset(bits, (unsigned char)0, (long)w*h*d*4);
+      //fprintf(stderr, "memset done.\n");
       float ***volume = vol->data;
       for (i = 0; i < nx; i++) {
-	//#pragma omp parallel for
 	for (j = 0; j < ny; j++) {
+#pragma omp parallel for private (k,frac,cidx,alf,idx,ir,ig,ib)
 	  for (k = 0; k < nz; k++) {
 	    //if ((volume[i][j][k] > dmin[0]) && (volume[i][j][k] < dmax[0])) {
 	    frac = (volume[i][j][k] - dmin[wh]) * denom_recip;
@@ -1092,31 +1105,33 @@ int main(int argc, char *argv[]) {
 
 	    //cidx = (idx1 + idx2) / 2;
 
-	    if (i == nx/2) {
-	      fprintf(stderr, "%8f    %8d   \n", frac, cidx);
-	    }
+	    //if (i == nx/2) {
+	      //fprintf(stderr, "%8f    %8d   \n", frac, cidx);
+	    //}
 	    s2qcr(cidx, &ir, &ig, &ib);
 	    alf = amin[wh] + (amax[wh] - amin[wh]) * (frac);
 	    if (volume[i][j][k] < dmin[wh]) {
 	      alf = 0.;
 	    }
-	    idx = 4 * (i + (j * nx) + (k * nx * ny));
+	    idx = (long)4 * ((long)i + (long)(j * nx) + (long)((long)k * nx * ny));
 	    bits[idx + 0] = (int)(ir * 255.0);
 	    bits[idx + 1] = (int)(ig * 255.0);
 	    bits[idx + 2] = (int)(ib * 255.0);
 	    bits[idx + 3] = (int)(alf* 255.0);
-	    if (bits[idx+3] < minaf) {
-	      minaf = bits[idx+3];
-	    }
-	    if (bits[idx+3] > maxaf) {
-	      maxaf = bits[idx+3];
-	    }
+	    //if (bits[idx+3] < minaf) {
+	    //  minaf = bits[idx+3];
+	    //}
+	    //if (bits[idx+3] > maxaf) {
+	    //  maxaf = bits[idx+3];
+	    //}
 	    //}
 	  }
 	}
       }
-      ss2pt(tex3d[wh]);
-      fprintf(stderr, "minaf = %f, maxaf = %f\n", minaf, maxaf);
+      fprintf(stderr, "about to push texture...\n");
+      ss2ptt(tex3d[wh]);
+      fprintf(stderr, "pushed texture done.\n");
+      //fprintf(stderr, "minaf = %f, maxaf = %f\n", minaf, maxaf);
       
     } else {
       vidx[wh] = ns2cvr(vol->data, nx, ny, nz, 0, nx-1, 0, ny-1, 0, nz-1, 

@@ -44,15 +44,17 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  XRAW_STRUCT *xr = loadXraw(argv[1]);
+  XRAW_STRUCT *xr = preloadXraw(argv[1]);
   if (!xr) {
     fprintf(stderr, "Failed to open or read '%s'\n", argv[1]);
     return -1;
   }
 
   showXraw(xr);
-
-  free(xr->data);
+  
+  if (xr->data) {
+    free(xr->data);
+  }
   free(xr);
 
   return 0;

@@ -127,13 +127,22 @@ int main(int argc, char *argv[]) {
   tgavol->wdz = wdelta[2];
 
   showXvol(tgavol);
-  VOL_STRUCT *tgavol_sm = rebinXvol(tgavol, stride);
+  VOL_STRUCT *tgavol_sm;
+  if (stride[0] + stride[1] + stride[2] > 3) {
+    fprintf(stderr, "rebinning...\n");
+    tgavol_sm = rebinXvol(tgavol, stride);
+  } else {
+    tgavol_sm = tgavol;
+  }
+  fprintf(stderr, "normalising...\n");
   normaliseXvol(tgavol_sm);
   showXvol(tgavol_sm);
 
+  fprintf(stderr, "converting...\n");
   XRAW_STRUCT *xraw = Xvol2Xraw(tgavol_sm);
   sprintf(xraw->filename, ofname);
   showXraw(xraw);
+  fprintf(stderr, "writing...\n");
   saveXraw(xraw);
 
   return 0;

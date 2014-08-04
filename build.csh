@@ -41,9 +41,9 @@ if (!(${?S2EXTRALIB})) then
   setenv S2EXTRALIB ""
 endif
 
-setenv S2EXTRAINC "${S2EXTRAINC} -I/opt/local/include"
+setenv S2EXTRAINC "${S2EXTRAINC} -fopenmp -I/opt/local/include"
 
-setenv S2EXTRALIB "${S2EXTRALIB} -lz -lpng"
+setenv S2EXTRALIB "${S2EXTRALIB} -fopenmp -lz -lpng"
 
 clbuild.csh xrw libxrw.c
 
@@ -51,6 +51,7 @@ cbuild.csh objrange
 cbuild.csh ushortraw2xrw
 cbuild.csh 3dcheckerboard2xrw
 cbuild.csh tgastack2xrw
+cbuild.csh xrw2xrw
 cbuild.csh xrw2pdf
 cbuild.csh xrw2points
 cbuild.csh xrwinfo
@@ -75,8 +76,8 @@ setenv S2EXTRALIB "${S2EXTRALIB} -L/opt/local/lib"
 
 cbuild.csh xrw2pngmos
 
-setenv S2EXTRAINC "${S2EXTRAINC} -I/opt/local/include/nifti"
-setenv S2EXTRALIB "${S2EXTRALIB} -lniftiio"
+setenv S2EXTRAINC "${S2EXTRAINC} -I/usr/local/niftilib/2.0.0/include"
+setenv S2EXTRALIB "${S2EXTRALIB} -L/usr/local/niftilib/2.0.0/lib -lniftiio -lznz"
 cbuild.csh nifti2xrw
 
 

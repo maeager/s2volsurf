@@ -53,6 +53,10 @@ void deleteXraw(XRAW_STRUCT *xr) {
   free(xr);
 }
 
+void deleteXvol(VOL_STRUCT *xv) {
+  fprintf(stderr, "LIBXRW WARNING: deleteXvol TBI\n");
+}
+
 VOL_STRUCT *cloneXvol(VOL_STRUCT *vol) {
   VOL_STRUCT *ret = (VOL_STRUCT *)malloc(sizeof(VOL_STRUCT));
   strcpy(ret->filename, vol->filename);
@@ -101,7 +105,8 @@ void accumulateXvol(VOL_STRUCT *dest, VOL_STRUCT *src, float scale) {
 #define RAW_UINT8 1
 #define RAW_UINT16 2
 
-XRAW_STRUCT *loadXraw(char *fname) {
+XRAW_STRUCT *preloadXraw(char *fname) { // just get the metadata
+
   // open input file
 #if defined(USEGZ)
   gzFile fin = gzopen(fname, "rb");
@@ -161,9 +166,90 @@ XRAW_STRUCT *loadXraw(char *fname) {
   //fprintf(stderr, "voxels sizes are %f %f %f\n", xrs->wdx, xrs->wdy, xrs->wdz);
   //fprintf(stderr, "ftell is %ld\n", ftell(fin));
 
+  CLOSEFILE(fin);
+  return xrs;
+}
+
+XRAW_STRUCT *loadXraw(char *fname) {
+
+  XRAW_STRUCT *xrs = preloadXraw(fname);
+  if (!xrs) {
+    fprintf(stderr, "Failed to preload Xraw file\n");
+    return NULL;
+  }
+
+  // open input file
+#if defined(USEGZ)
+  gzFile fin = gzopen(fname, "rb");
+#else
+  FILE *fin = fopen(fname, "rb");
+#endif
+  if (!fin) {
+    fprintf(stderr, "Failed to open file '%s'.\n", fname);
+    return NULL;
+  }
+
+#if (1) 
+  int offset = 3 * sizeof(xrs->nx) + 3 * sizeof(xrs->wdx);
+  gzseek(fin, offset, SEEK_SET);
+
+
+#else
+  // allocate container
+  XRAW_STRUCT *xrs = (XRAW_STRUCT *)malloc(1 * sizeof(XRAW_STRUCT));
+  if (!xrs) {
+    fprintf(stderr, "Failed to create container for file '%s'.\n", fname);
+    CLOSEFILE(fin);
+    return NULL;
+  }
+
+  strcpy(xrs->filename, fname);
+
+  // get nx, ny, nz
+#if defined(USEGZ)
+  if ((gzread(fin, &(xrs->nx), sizeof(xrs->nx)) != sizeof(xrs->nx)) ||
+      (gzread(fin, &(xrs->ny), sizeof(xrs->ny)) != sizeof(xrs->ny)) ||
+      (gzread(fin, &(xrs->nz), sizeof(xrs->nz)) != sizeof(xrs->nz))) {
+#else
+  if (!fread(&(xrs->nx), sizeof(xrs->nx), 1, fin) ||
+      !fread(&(xrs->ny), sizeof(xrs->ny), 1, fin) || 
+      !fread(&(xrs->nz), sizeof(xrs->nz), 1, fin)) {
+#endif
+    fprintf(stderr, "Failed to read volume dimensions.\n");
+    free(xrs);
+    CLOSEFILE(fin);
+    return NULL;
+  }
+
+  //fprintf(stderr, "vol dimensions are %d %d %d\n", xrs->nx, xrs->ny, xrs->nz);
+  //fprintf(stderr, "ftell is %ld\n", ftell(fin));
+
+  // get wdx, wdy, wdz
+#if defined(USEGZ)
+  if ((gzread(fin, &(xrs->wdx), sizeof(xrs->wdx)) != sizeof(xrs->wdx)) ||
+      (gzread(fin, &(xrs->wdy), sizeof(xrs->wdy)) != sizeof(xrs->wdy)) ||
+      (gzread(fin, &(xrs->wdz), sizeof(xrs->wdz)) != sizeof(xrs->wdz))) {
+#else
+  if (!fread(&xrs->wdx, sizeof(xrs->wdx), 1, fin) ||
+      !fread(&xrs->wdy, sizeof(xrs->wdy), 1, fin) || 
+      !fread(&xrs->wdz, sizeof(xrs->wdz), 1, fin)) {
+#endif
+    fprintf(stderr, "Failed to read voxel sizes.\n");
+    free(xrs);
+    CLOSEFILE(fin);
+    return NULL;
+  }
+
+  //fprintf(stderr, "voxels sizes are %f %f %f\n", xrs->wdx, xrs->wdy, xrs->wdz);
+  //fprintf(stderr, "ftell is %ld\n", ftell(fin));
+
+#endif
+
   // get data
-  long nvals = xrs->nx * xrs->ny * xrs->nz;
-  xrs->data = (unsigned char *)malloc(nvals * sizeof(unsigned char));
+  long nvals = (long)xrs->nx * xrs->ny * xrs->nz;
+  fprintf(stderr, "attempting to allocate %ld bytes...\n", nvals);
+  //xrs->data = (unsigned char *)malloc(nvals * sizeof(unsigned char));
+  xrs->data = (unsigned char *)calloc(xrs->nx * sizeof(unsigned char), xrs->ny * xrs->nz);
   if (!xrs->data) {
     fprintf(stderr, "Failed to allocate storage for volume.\n");
     free(xrs);
@@ -172,7 +258,15 @@ XRAW_STRUCT *loadXraw(char *fname) {
   }     
   
 #if defined(USEGZ)
-  if (gzread(fin, xrs->data, sizeof(unsigned char)*nvals) != sizeof(unsigned char)*nvals) {
+  //if (gzread(fin, xrs->data, sizeof(unsigned char)*nvals) != sizeof(unsigned char)*nvals) {
+  int _fail = 0;
+  int stripe = 0;
+  int stripesize = xrs->ny * xrs->nz * sizeof(unsigned char);
+  while ((stripe < xrs->nx) && !_fail) {
+    _fail = gzread(fin, xrs->data + (long)stripe * stripesize, stripesize) != stripesize;
+    stripe++;
+  }
+  if (_fail) {
 #else
   if (fread(xrs->data, sizeof(unsigned char), nvals, fin) != nvals) {
 #endif
@@ -221,6 +315,57 @@ XRAW_STRUCT *loadXraw(char *fname) {
 
   CLOSEFILE(fin);
   return xrs;
+}
+
+XRAW_STRUCT *trimXraw(XRAW_STRUCT *xr, int trim[3]) {
+
+  if ((2 * trim[0] > xr->nx - 2) ||
+      (2 * trim[1] > xr->ny - 2) ||
+      (2 * trim[2] > xr->nz - 2)) {
+    fprintf(stderr, "trimXraw: cannot trim to a negative volume size\n");
+    return NULL;
+  } 
+
+  XRAW_STRUCT *xro = (XRAW_STRUCT *)malloc(1 * sizeof(XRAW_STRUCT));
+  if (!xro) {
+    fprintf(stderr, "Failed to create container for trimmed xrw file.\n");
+    return NULL;
+  }
+
+  strcpy(xro->filename, xr->filename);
+
+  xro->nx = xr->nx - 2 * trim[0];
+  xro->ny = xr->ny - 2 * trim[1];
+  xro->nz = xr->nz - 2 * trim[2];
+
+  xro->wdx = xr->wdx;
+  xro->wdy = xr->wdy;
+  xro->wdz = xr->wdz;
+
+  xro->data = (unsigned char *)calloc(xro->nx * sizeof(unsigned char), xro->ny * xro->nz);
+  if (!xro->data) {
+    fprintf(stderr, "Failed to allocate unsigned char volume.\n");
+    free(xro);
+    return NULL;
+  }
+  long i, j, k;
+  for (i = 0; i < xro->nx; i++) {
+    for (j = 0; j < xro->ny; j++) {
+#pragma omp parallel for private(k)
+      for (k = 0; k < xro->nz; k++) {
+	xro->data[k * xro->nx * xro->ny + j * xro->nx + i] = 
+	  xr->data[(k+trim[2]) * xr->nx * xr->ny + (j+trim[1]) * xr->nx + (i+trim[0])];
+      }
+    }
+  }    	   
+
+  for (i = 0; i < 256; i++) {
+    xro->red[i] = xr->red[i];
+    xro->green[i] = xr->green[i];
+    xro->blue[i] = xr->blue[i];
+  }
+  
+  return xro;
 }
 
 void showXraw(XRAW_STRUCT *xr) {
@@ -279,10 +424,19 @@ int saveXraw(XRAW_STRUCT *xr) {
   }
   
   // put data
-  long nvals = xr->nx * xr->ny * xr->nz;
+  //long nvals = xr->nx * xr->ny * xr->nz;
 #if defined(USEGZ)
-  if (gzwrite(fout, xr->data, sizeof(unsigned char)*nvals) != sizeof(unsigned char)*nvals) {
+  //if (gzwrite(fout, xr->data, sizeof(unsigned char)*nvals) != sizeof(unsigned char)*nvals) {
+  int _fail = 0;
+  int stripe = 0;
+  int stripesize = xr->ny * xr->nz * sizeof(unsigned char);
+  while ((stripe < xr->nx) && !_fail) {
+    _fail = gzwrite(fout, xr->data + (long)stripe * stripesize,  stripesize) != stripesize;
+    stripe++;
+  }
+  if (_fail) {
 #else
+  long nvals = xr->nx * xr->ny * xr->nz;
   if (!fwrite(xr->data, sizeof(unsigned char), nvals, fout)) {
 #endif
     fprintf(stderr, "Failed to write entire volume.\n");
@@ -388,6 +542,7 @@ VOL_STRUCT *makePow2Xvol(VOL_STRUCT *xrv) {
 	fprintf(stderr, "Failed to allocate column in float volume.\n");
 	return NULL;
       }
+#pragma omp parallel for private(k,zc,k1,k2,zw1,sum,wgt,ax,ay,az)
       for (k = 0; k < vol->nz; k++) {
 	zc = (float)k * (float)xrv->nz / (float)vol->nz;
 	k1 = floorf(zc);
@@ -490,18 +645,15 @@ VOL_STRUCT *Xraw2Xvol(XRAW_STRUCT *xrs, int stride[3]) {
 	fprintf(stderr, "Failed to allocate column in float volume.\n");
 	return NULL;
       }
+#pragma omp parallel for private(k,ik,sum,ax,ay,az)
       for (k = 0; k < vol->nz; k++) {
 	ik = k * stride[2];
-#if (0)
-	// no averaging:
-	vol->data[i][j][k] = (float)(xrs->data[ik * w * h + ij * w + ii]) / 255.0;
-#else	
 	// averaging
 	sum = 0.0;
 	for (ax = 0; ax < stride[0]; ax++) {
 	  for (ay = 0; ay < stride[1]; ay++) {
 	    for (az = 0; az < stride[2]; az++) {
-	      sum += (float)(xrs->data[(ik+az)*w*h + (ij+ay)*w + (ii+ax)]) / 255.0;
+	      sum += (float)(xrs->data[(long)(ik+az)*w*h + (ij+ay)*w + (ii+ax)]) / 255.0;
 	    }
 	  }
 	}
@@ -509,7 +661,7 @@ VOL_STRUCT *Xraw2Xvol(XRAW_STRUCT *xrs, int stride[3]) {
 	// s2plot (and pdf) matches orientation xrw was exported from in 
 	// OsiriX
 	vol->data[i][vol->ny-1-j][vol->nz-1-k] = sum / (float)(stride[0] * stride[1] * stride[2]);
-#endif
+
       }
     }
   }
@@ -550,8 +702,8 @@ void showXvol(VOL_STRUCT *xv) {
       }
     }
   }
-  meansq /= (float)(xv->nx * xv->ny * xv->nz);
-  mean /= (float)(xv->nx * xv->ny * xv->nz);
+  meansq /= (float)((float)xv->nx * xv->ny * xv->nz);
+  mean /= (float)((float)xv->nx * xv->ny * xv->nz);
   float rms = sqrt(meansq - mean*mean);
   fprintf(stdout, "    min, mean(stddev), max: %6.4f %6.4f(%6.4f) %6.4f\n", 
 	  min, mean, rms, max);
@@ -559,7 +711,7 @@ void showXvol(VOL_STRUCT *xv) {
 }
 
 VOL_STRUCT *loadUshortRaw(char *ifname, int nx, int ny, int nz) {
-
+  fprintf(stderr, "LIBXRW WARNING: loadUshortRaw NOT 64BIT COMPLIANT\n");
   VOL_STRUCT *vol = (VOL_STRUCT *)malloc(1 * sizeof(VOL_STRUCT));
   if (!vol) {
     fprintf(stderr, "Failed to create parsed volume container.\n");
@@ -645,9 +797,8 @@ VOL_STRUCT *loadTGAstack(char *basename, int startframe, int endframe, int strid
     vol->data[i/stride] = (float **)malloc(w * sizeof(float *));
     for (j = 0; j < w; j++) {
       vol->data[i/stride][j] = (float *)malloc(h * sizeof(float *));
+#pragma omp parallel for private(k)
       for (k = 0; k < h; k++) {
-	//volume[i/STRIDE][j][k] = readbits[j * h + k].r +
-	// readbits[j * h + k].g + readbits[j * h + k].b;
 	vol->data[i/stride][j][h-k-1] = readbits[j + k * w].r +
 	  readbits[j + k * w].g + readbits[j + k * w].b;
       }
@@ -715,12 +866,9 @@ VOL_STRUCT *rebinXvol(VOL_STRUCT *ivol, int stride[3]) {
 	fprintf(stderr, "Failed to allocate column in float volume.\n");
 	return NULL;
       }
+#pragma omp parallel for private(k,ik,sum,ax,ay,az)
       for (k = 0; k < vol->nz; k++) {
 	ik = k * stride[2];
-#if (0)
-	// no averaging:
-	vol->data[i][j][k] = (float)(ivol->data[ik * w * h + ij * w + ii]) / 255.0;
-#else	
 	// averaging
 	sum = 0.0;
 	for (ax = 0; ax < stride[0]; ax++) {
@@ -731,7 +879,6 @@ VOL_STRUCT *rebinXvol(VOL_STRUCT *ivol, int stride[3]) {
 	  }
 	}
 	vol->data[i][j][k] = sum / (float)(stride[0] * stride[1] * stride[2]);
-#endif
       }
     }
   }
@@ -769,6 +916,7 @@ void rangeNormaliseXvol(VOL_STRUCT *vol, float dmin, float dmax) {
   int i, j, k;
   for (i = 0; i < vol->nx; i++) {
     for (j = 0; j < vol->ny; j++) {
+#pragma omp parallel for private(k)
       for (k = 0; k < vol->nz; k++) {
 	vol->data[i][j][k] = (vol->data[i][j][k] - dmin) / (dmax - dmin);
       }
@@ -799,6 +947,7 @@ void tightenXvol(VOL_STRUCT *vol, float lo_sigma, float hi_sigma) {
 
   for (i = 0; i < vol->nx; i++) {
     for (j = 0; j < vol->ny; j++) {
+#pragma omp parallel for private(k)
       for (k = 0; k < vol->nz; k++) {
 	vol->data[i][j][k] = (vol->data[i][j][k] - lmin) / (lmax - lmin);
       }
@@ -851,6 +1000,7 @@ void derivXvol(VOL_STRUCT *vol) {
   }
   for (i = 0; i < vol->nx; i++) {
     for (j = 0; j < vol->ny; j++) {
+#pragma omp parallel for private(k)
       for (k = 0; k < vol->nz; k++) {
 	vol->data[i][j][k] = (ndat[i][j][k] - dmin) / (dmax - dmin);
       }
@@ -896,7 +1046,8 @@ XRAW_STRUCT *Xvol2Xraw(VOL_STRUCT *vol) {
   xrs->wdz = vol->wdz;
 
   // copy data
-  xrs->data = (unsigned char *)malloc(xrs->nx * xrs->ny * xrs->nz * sizeof(unsigned char));
+  //xrs->data = (unsigned char *)malloc(xrs->nx * xrs->ny * xrs->nz * sizeof(unsigned char));
+  xrs->data = (unsigned char *)calloc(xrs->nx * sizeof(unsigned char), xrs->ny * xrs->nz);
   if (!xrs->data) {
     fprintf(stderr,"Failed to allocate unsigned char volume.\n");
     free(vol);
@@ -907,6 +1058,7 @@ XRAW_STRUCT *Xvol2Xraw(VOL_STRUCT *vol) {
   float tmp;
   for (i = 0; i < xrs->nx; i++) {
     for (j = 0; j < xrs->ny; j++) {
+#pragma omp parallel for private(k,tmp)
       for (k = 0; k < xrs->nz; k++) {
 	// fill y and z planes in reverse directions so that home view in 
 	// s2plot (and pdf) matches orientation xrw was exported from in 
@@ -914,7 +1066,7 @@ XRAW_STRUCT *Xvol2Xraw(VOL_STRUCT *vol) {
 	tmp = vol->data[i][xrs->ny-1-j][xrs->nz-1-k] * 256;
 	if (tmp < 0.) { tmp = 0.; }
 	if (tmp > 255.999) { tmp = 255.999; }
-	xrs->data[k * w * h + j * w + i] = (unsigned char)(floorf(tmp));
+	xrs->data[(long)k * w * h + j * w + i] = (unsigned char)(floorf(tmp));
       }
     }
   }
@@ -931,7 +1083,7 @@ XRAW_STRUCT *Xvol2Xraw(VOL_STRUCT *vol) {
 
 
 VOL_STRUCT *loadRaw(char *filename, int nx, int ny, int nz, int type) {
-
+  fprintf(stderr, "LIBXRW WARNING: loadRaw NOT 64BIT COMPLIANT\n");
   VOL_STRUCT *vol = (VOL_STRUCT *)malloc(1 * sizeof(VOL_STRUCT));
   if (!vol) {
     fprintf(stderr, "Failed to create parsed volume container.\n");
