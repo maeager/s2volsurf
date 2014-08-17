@@ -565,15 +565,8 @@ void transformObj(OBJ_STRUCT *obj, float *m) {
     out.z = m[8]*in.x + m[9]*in.y + m[10]*in.z + m[11];
     obj->verts[i] = out;
   }
-  in = obj->minP;
-  obj->minP.x = m[0]*in.x + m[1]*in.y + m[2]*in.z + m[3];
-  obj->minP.y = m[4]*in.x + m[5]*in.y + m[6]*in.z + m[7];
-  obj->minP.z = m[8]*in.x + m[9]*in.y + m[10]*in.z + m[11];
-  
-  in = obj->maxP;
-  obj->maxP.x = m[0]*in.x + m[1]*in.y + m[2]*in.z + m[3];
-  obj->maxP.y = m[4]*in.x + m[5]*in.y + m[6]*in.z + m[7];
-  obj->maxP.z = m[8]*in.x + m[9]*in.y + m[10]*in.z + m[11];
+
+  calcObjMinMaxMean(obj);  
 }
 
 void drawObjAsTexturedMesh(OBJ_STRUCT *obj, unsigned int texid) {
