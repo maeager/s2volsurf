@@ -58,16 +58,26 @@ XYZ **start = NULL;    // where does each track start?
 long ntracks = 0;
 extern int _s2_conelines;
 
+// points
+typedef struct {
+  char fname[400];
+  float r, g, b;
+  char label[100];
+  int n;
+  float *x, *y, *z;
+} XPT_STRUCT;
+XPT_STRUCT *xpts = NULL;
+int nxpts = 0;
 
 int NVR = 0;
 
 void ds2dvrx(int vrid, int force_reload, int axis, int force_draw);
-int vidx[4], vidy[4], vidz[4];
+int vidx[MAXNVOL], vidy[MAXNVOL], vidz[MAXNVOL];
 int doPRC;
   int suppress_vr = 0;
-float isolev[4];
-COLOUR isocol[4];
-float isoalf[4];
+float isolev[MAXNVOL];
+COLOUR isocol[MAXNVOL];
+float isoalf[MAXNVOL];
 
 int do_slice_reveal = 0;
 // count of numeric keys pressed
@@ -85,7 +95,7 @@ void numcb(int *num) {
 }
 
 // standards are dmin 0 dmax 1 amin 0 amax 0.2
-float dmin[4], dmax[4], amin[4], amax[4];
+float dmin[MAXNVOL], dmax[MAXNVOL], amin[MAXNVOL], amax[MAXNVOL];
 float scapower[MAXNVOL];
 
 int doDeriv[MAXNVOL];
@@ -218,7 +228,7 @@ void cb(double *t, int *kc) {
 	  // and this world vertex position
 	  worldverts[zh][i].x = _tr[zh][0] + _tr[zh][1] * dataverts[i].x 
 	    + _tr[zh][2] * dataverts[i].y + _tr[zh][3] * dataverts[i].z;
-	  worldverts[zh][i].y = _tr[zh][4] + _tr[zh][5] * dataverts[i].x 
+	  worldverts[zh][i].y = _tr[zh][4]+ _tr[zh][5] * dataverts[i].x 
 	    + _tr[zh][6] * dataverts[i].y + _tr[zh][7] * dataverts[i].z;
 	  worldverts[zh][i].z = _tr[zh][8] + _tr[zh][9] * dataverts[i].x 
 	    + _tr[zh][10] * dataverts[i].y + _tr[zh][11] * dataverts[i].z;
@@ -536,6 +546,16 @@ void cb(double *t, int *kc) {
     pushVRMLname("ANON");
   }
   
+  // draw points
+  int i, j;
+  for (i = 0; i < nxpts; i++) {
+    for (j = 0; j < xpts[i].n; j++) {
+      ns2sphere(xpts[i].x[j], xpts[i].y[j], xpts[i].z[j], 0.6,
+		 xpts[i].r, xpts[i].g, xpts[i].b);
+    }
+  }
+    
+
 }
 
 int kcb(unsigned char *key) {
@@ -571,6 +591,9 @@ void usage(char *exename) {
   fprintf(stderr, "-Vx            calculate and use vertex normals\n");
   fprintf(stderr, "-Tf            (ascii) track name file pattern\n");
   fprintf(stderr, "-Ts            track file skip factor (default 1000)\n");
+
+  fprintf(stderr, " * * * point sets (pixel-based coordinates)\n");
+  fprintf(stderr, "-P pointfname label r g b  draw points in ascii xyz file with colour\n");
 
   fprintf(stderr, " * * * global options\n");
   fprintf(stderr, "-SV            suppress volume rendering\n");
@@ -714,6 +737,59 @@ int main(int argc, char *argv[]) {
 	fprintf(stderr, "unknown input surface format: %s\n", objname);
 	exit(-1);
       }
+
+    } else if (!strcmp(argv[ic], "-P")) {
+      nxpts++;
+      char xptsname[FNAMELEN+1];
+      char label[OBJ_STRUCT_LABEL_LEN+1];
+      strncpy(xptsname, argv[++ic], FNAMELEN);
+      strncpy(label, argv[++ic], OBJ_STRUCT_LABEL_LEN);
+      float r, g, b;
+      r = atof(argv[++ic]);
+      g = atof(argv[++ic]);
+      b = atof(argv[++ic]);
+      xpts = (XPT_STRUCT *)realloc(xpts, nxpts * sizeof(XPT_STRUCT));
+      if (!strncmp(xptsname+strlen(xptsname)-3, "xyz", 3)) {
+	// code from here should be a "loadXpts" function...
+	strcpy(xpts[nxpts-1].fname, xptsname);
+	strcpy(xpts[nxpts-1].label, label);
+	xpts[nxpts-1].r = r;
+	xpts[nxpts-1].g = g;
+	xpts[nxpts-1].b = b;
+	
+	FILE *fin = fopen(xptsname, "r");
+	if (!fin) {
+	  fprintf(stderr, "could not open points file: %s\n", xptsname);
+	  exit(-1);
+	}
+	int n = 0;
+	int n_alloc = 0;
+	xpts[nxpts-1].x = xpts[nxpts-1].y = xpts[nxpts-1].z = NULL;
+	float x,y,z;
+	while(fscanf(fin, "%f%f%f", &x, &y, &z) == 3) {
+	  if (n >= n_alloc) {
+	    n_alloc += VERT_CHUNK;
+	    xpts[nxpts-1].x = (float *)realloc(xpts[nxpts-1].x, n_alloc * sizeof(float));
+	    xpts[nxpts-1].y = (float *)realloc(xpts[nxpts-1].y, n_alloc * sizeof(float));
+	    xpts[nxpts-1].z = (float *)realloc(xpts[nxpts-1].z, n_alloc * sizeof(float));
+	    if (!xpts[nxpts-1].x || !xpts[nxpts-1].y || !xpts[nxpts-1].z) {
+	      fprintf(stderr, "Failed to allocate space for points.\n");
+	      exit(-1);
+	    }
+	  }
+	  xpts[nxpts-1].x[n] = x;
+	  xpts[nxpts-1].y[n] = y;
+	  xpts[nxpts-1].z[n] = z;
+	  fprintf(stderr, "read %d, %f %f %f\n", n, xpts[nxpts-1].x[n], xpts[nxpts-1].y[n], xpts[nxpts-1].z[n]);
+	  n++;
+	}
+	xpts[nxpts-1].n = n;
+
+      } else {
+	fprintf(stderr, "unknown input points format: %s\n", xptsname);
+	exit(-1);
+      }
+
     } else if (!strcmp(argv[ic], "-i")) {
       invert = 1;
     } else if (!strcmp(argv[ic], "-x")) {
@@ -975,7 +1051,8 @@ int main(int argc, char *argv[]) {
     
     s2qwin(&wx1,&wx2,&wy1,&wy2,&wz1,&wz2);
     fprintf(stderr, "s2swin(%f,%f,%f,%f,%f,%f)\n", wx1,wx2, wy1,wy2, wz1,wz2);
-  
+    
+
     if (wh == 0) {
       // set up lights
       COLOUR ambient = {0.7,0.7,0.7};

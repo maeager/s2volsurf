@@ -71,12 +71,12 @@ else
   echo "PGPLOT_DIR not set, cannot build xrwhist"
 endif
 
-setenv S2EXTRAINC "${S2EXTRAINC} -I/usr/X11/include"
+setenv S2EXTRAINC "-I/usr/X11/include ${S2EXTRAINC} -I/usr/X11/include"
 setenv S2EXTRALIB "${S2EXTRALIB} -L/opt/local/lib"
 
 cbuild.csh xrw2pngmos
 
-setenv S2EXTRAINC "${S2EXTRAINC} -I/usr/local/niftilib/2.0.0/include"
+setenv S2EXTRAINC "${S2EXTRAINC} -I/usr/local/niftilib/2.0.0/include -I/opt/local/include/nifti"
 setenv S2EXTRALIB "${S2EXTRALIB} -L/usr/local/niftilib/2.0.0/lib -lniftiio -lznz"
 cbuild.csh nifti2xrw
 
