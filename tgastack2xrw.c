@@ -45,6 +45,7 @@ void usage(char *exename) {
   fprintf(stderr, " * * * (infileformat should include integer specifier e.g. %%04d)\n");
   fprintf(stderr, " -s s1 s2 s3\t\t set data averaging along each axis (1 1 1)\n");
   fprintf(stderr, " -w wx wy wz\t\t set world size of pixels (1.0 1.0 1.0)\n");
+  fprintf(stderr, " -R r\t\t set data read stride, i.e. step in file count\n");
 }
 
 #define FNAMELEN 400
@@ -57,6 +58,7 @@ int main(int argc, char *argv[]) {
   int haveofname = 0;
   float wdelta[] = {1.,1.,1.};
   int stride[] = {1,1,1};
+  int read_stride = 1;
   
   if (argc < 5) {
     usage(argv[0]);
@@ -83,6 +85,8 @@ int main(int argc, char *argv[]) {
       wdelta[0] = atof(argv[++ic]);
       wdelta[1] = atof(argv[++ic]);
       wdelta[2] = atof(argv[++ic]);
+    } else if (!strcmp(argv[ic], "-R")) {
+      read_stride = atoi(argv[++ic]);
     }
     ic++;
   }
@@ -121,7 +125,7 @@ int main(int argc, char *argv[]) {
   
   fprintf(stderr, "File index appears to go from %d to %d\n", istart, iend);
   
-  VOL_STRUCT *tgavol = loadTGAstack(ifname, istart, iend, 1);
+  VOL_STRUCT *tgavol = loadTGAstack(ifname, istart, iend, read_stride);
   tgavol->wdx = wdelta[0];
   tgavol->wdy = wdelta[1];
   tgavol->wdz = wdelta[2];

@@ -803,6 +803,7 @@ VOL_STRUCT *loadTGAstack(char *basename, int startframe, int endframe, int strid
 	  readbits[j + k * w].g + readbits[j + k * w].b;
       }
     }
+    free(readbits);
   }
 
   vol->wdx = vol->wdy = vol->wdz = 1.0;
