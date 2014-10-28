@@ -49,6 +49,7 @@ typedef struct {
    unsigned char blue[256];  // blue
 } XRAW_STRUCT;
 XRAW_STRUCT *loadXraw(char *fname);
+XRAW_STRUCT *createXraw(char *fname, int nx, int ny, int nz, int borderwidth);
 XRAW_STRUCT *preloadXraw(char *fname); // just metadata
 XRAW_STRUCT *trimXraw(XRAW_STRUCT *xr, int trim[3]);
 void showXraw(XRAW_STRUCT *xr);

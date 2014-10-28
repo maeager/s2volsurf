@@ -316,6 +316,52 @@ XRAW_STRUCT *loadXraw(char *fname) {
   CLOSEFILE(fin);
   return xrs;
 }
+  
+XRAW_STRUCT *createXraw(char *fname, int nx, int ny, int nz, int borderwidth) {
+
+  XRAW_STRUCT *xrw = (XRAW_STRUCT *)malloc(sizeof(XRAW_STRUCT));
+  
+  strcpy(xrw->filename, fname);
+
+  xrw->nx = nx;
+  xrw->ny = ny;
+  xrw->nz = nz;
+  
+  xrw->wdx = xrw->wdy = xrw->wdz = 1.0;
+  
+  xrw->data = (unsigned char *)calloc((long)nx * (long)ny, (long)nz * sizeof(unsigned char));
+  long i, j, k;
+  unsigned char val, border;
+  for (i = 0; i < (long)nx; i++) {
+    for (j = 0; j < (long)ny; j++) {
+      for (k = 0; k < (long)nz; k++) {
+	val = 0;
+	border = 0;
+	if ((i < borderwidth) || (i > nx-borderwidth)) {
+	  border++;
+	}
+	if ((j < borderwidth) || (j > ny-borderwidth)) {
+	  border++;
+	}
+	if ((k < borderwidth) || (k > nz-borderwidth)) {
+	  border++;
+	}
+	if (border == 2) {
+	  val = 255;
+	}
+	xrw->data[k * (long)nz * (long)ny + j * (long)nx + i]  = val;
+      }
+    }
+  }
+
+  for (i = 0; i < 256; i++) {
+    xrw->red[i] = xrw->green[i] = xrw->blue[i] = (unsigned char)i;
+  }
+
+  return xrw;
+
+ }
+
 
 XRAW_STRUCT *trimXraw(XRAW_STRUCT *xr, int trim[3]) {
 

@@ -47,6 +47,7 @@ setenv S2EXTRALIB "${S2EXTRALIB} -fopenmp -lz -lpng"
 
 clbuild.csh xrw libxrw.c
 
+cbuild.csh makexrw
 cbuild.csh objrange
 cbuild.csh ushortraw2xrw
 cbuild.csh 3dcheckerboard2xrw
