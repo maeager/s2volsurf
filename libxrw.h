@@ -34,6 +34,9 @@
 
 /* * * * * N.B. read/write only ints, not longs (32/64-bit diff) * * * * */
 
+#if !defined(_LIBXRW_H)
+#define _LIBXRW_H
+
 #include <stdio.h>
 #include <string.h>
 
@@ -83,4 +86,6 @@ void accumulateXvol(VOL_STRUCT *dest, VOL_STRUCT *src, float scale);
 XRAW_STRUCT *Xvol2Xraw(VOL_STRUCT *xv);
 void Xvol2png(VOL_STRUCT *xv, char *filename, int use_rows);
 VOL_STRUCT *loadRaw(char *filename, int nx, int ny, int nz, int type);
+
+#endif
 
