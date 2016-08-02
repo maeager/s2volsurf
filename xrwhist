@@ -1,0 +1,54 @@
+#!/bin/tcsh
+#
+# Plot histogram of xrw volume using gnuplot
+#
+# Michael Eager 2016
+
+source $S2PATH/scripts/s2plot.csh
+
+if (!(${?S2PATH})) then
+  echo " Cannot find environment variable S2PATH "
+  exit 1
+endif
+set GNUPLOT = `which gnuplot`
+if (!(-x $GNUPLOT)) then
+  echo "Cannot find gnuplot"
+  exit 1
+endif
+set XRWHIST = `which xrwhistplot`
+if (!(-x $XRWHIST)) then
+  echo "Cannot find xrwhistplot"
+  exit 1
+endif
+
+set xrwtmp = ""
+set XRWHIST_datafile = "hist.dat"
+
+# if test "$#"  -eq 2 ; then
+if ( $#argv == 2 )then
+    echo "Illegal number of parameters"
+    set XRWHIST_datafile = "$2"
+else 
+if ( ! -d $TEMP ) then
+    echo " $TEMP is not a directory."
+ if ( ! -d $TMP ) then
+     echo " $TMP is not a directory."
+     if ( ! -d $TMPDIR ) then
+         echo " $TMPDIR is not a directory."
+     	 set xrwtmp = "./"
+     else
+        set xrwtmp = $TMPDIR
+     endif
+   else
+     set xrwtmp = $TMP
+   endif
+else
+   set xrwtmp = $TEMP
+endif
+
+    set XRWHIST_datafile = ${xrwtmp}/XRWHIST_data.txt 
+endif
+
+echo $xrwtmp
+$XRWHIST $1 > ${XRWHIST_datafile}
+$GNUPLOT -e "filename='$XRWHIST_datafile';" $S2PATH/s2volsurf/histo.plt -
