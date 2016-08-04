@@ -138,9 +138,14 @@ int main(int argc, char **argv) {
     }
     
   }
-  fprintf(stderr, "New vertex range: (%f,%f,%f) -> (%f,%f,%f)\n", minP.x-mid.x,
-          minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x, maxP.y-mid.y, maxP.z-mid.z);
-  fprintf(stderr, "Old midpoint: (%f,%f,%f)\n", mid.x, mid.y, mid.z);fflush(stderr);
+  fprintf(stderr, "Old midpoint: (%f,%f,%f)\n", mid.x, mid.y, mid.z);
+  fprintf(stderr, "New vertex range: (%f,%f,%f) -> (%f,%f,%f)\n",
+          minP.x-mid.x, minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x,
+          maxP.y-mid.y, maxP.z-mid.z);fflush(stderr);
+
+  fprintf(stdout, "BoundingBox %.6f %.6f %.6f %.6f %.6f %.6f \n", minP.x-mid.x,
+          minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x, maxP.y-mid.y,
+         maxP.z-mid.z);
   free(origfilename);
   exit(EXIT_SUCCESS);
 }
@@ -157,12 +162,12 @@ int SaveTranslatedObj(char *filename_old,  char *filename_new, XYZ newCentre){
 
   FILE *fin = fopen(filename_old, "r");
   if (fin == NULL){
-    printf("SaveTranslatedObj: Original file %s could not be opened.\n",filename_old);
+    fprintf(stderr,"SaveTranslatedObj: Original file %s could not be opened.\n",filename_old);
     return -1;
   }
   FILE *fout = fopen(filename_new, "w");
   if (fout == NULL){
-    printf("SaveTranslatedObj: Cannot write to file %s.\n", filename_new);
+    fprintf(stderr,"SaveTranslatedObj: Cannot write to file %s.\n", filename_new);
     return -1;
   }
   
@@ -193,7 +198,7 @@ int SaveTranslatedObj(char *filename_old,  char *filename_new, XYZ newCentre){
 
   fprintf(stderr, "Read %d lines from '%s' to '%s'.\n", lcount, filename_old, filename_new);
   fprintf(stderr, "Translated\t%d vertices to file \n", nverts);
-
   fflush(stderr);
+  
   return 0;
 }
