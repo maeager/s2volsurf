@@ -42,116 +42,19 @@
  * 
  */
 
-#include <stdio.h>
+#include <stdio.h>        /* fopen,fclose,fflush */
 #include <stdlib.h>
 #include <math.h>
-#include <string.h>
+#include <string.h>       /* strlcpy   */ 
 #include <errno.h>        /* errno */
 
 #include "s2plot.h"
 #include "libobj.c"
 
-#define CMD_SIZE 256
+#define CMD_SIZE 1024
 char cmd[CMD_SIZE];
-void SaveObj ( char *filename_old,  char *filename_new, XYZ newCentre );
 
-
-int main(int argc, char **argv) {
-  
-  if (argc < 2) {
-    fprintf(stderr, "usage: %s objfilename[s]\n", argv[0]);
-    exit(EXIT_FAILURE);
-  }
-  int numObjFiles = argc-1;
-  XYZ minP, maxP;
-
-  int iarg;
-  for (iarg = 1; iarg < argc; iarg++) {
-    OBJ_STRUCT *obj; // = loadObj(argv[argc -iarg], "null", 1, 1, 1, 1);
-    char *ext = argv[argc-iarg] + strlen(argv[argc-iarg]) - 3;
-    if (!strncmp(ext, "obj", 3)) {
-      obj = loadObj(argv[argc-iarg], "null", 1,1,1,1);
-    } else if (!strncmp(ext, "stl", 3)) {
-      obj = loadObjFromSTL(argv[argc-iarg], "null", 1,1,1,1);
-    } else {
-      fprintf(stderr, "Cannot load file '%s'.\n", argv[argc-iarg]);fflush(stderr);
-      exit(EXIT_FAILURE);
-    }
-
-    if (iarg == 1) {
-      minP = obj->minP;
-      maxP = obj->maxP;
-    } else {
-      if (obj->minP.x < minP.x) {
-	minP.x = obj->minP.x;
-      }
-      if (obj->minP.y < minP.y) {
-	minP.y = obj->minP.y;
-      }
-      if (obj->minP.z < minP.z) {
-	minP.z = obj->minP.z;
-      }
-
-      if (obj->maxP.x > maxP.x) {
-	maxP.x = obj->maxP.x;
-      }
-      if (obj->maxP.y > maxP.y) {
-	maxP.y = obj->maxP.y;
-      }
-      if (obj->maxP.z > maxP.z) {
-	maxP.z = obj->maxP.z;
-      }
-      
-    }
-  }
-  // offset all model parts
-  XYZ mid = VectorAdd(minP, maxP);
-  mid = VectorMul(mid, 0.5);
-  fprintf(stderr, "OBJ vertex range: (%f,%f,%f) -> (%f,%f,%f)\n", minP.x, minP.y, minP.z,
-	  maxP.x, maxP.y, maxP.z);fflush(stderr);
-  fprintf(stderr, "OBJ vertex midpoint: (%f,%f,%f)\n", mid.x, mid.y, mid.z);fflush(stderr);
-  char *origfilename = NULL; //(char*)malloc(100*sizeof(char));
-  char *centredfilename = NULL;
-
-  fprintf(stderr, "Translating obj centre to 0,0,0....");  fflush(stderr);
-  for (iarg = 1; iarg < argc; iarg++) {
-    
-    char *ext = argv[argc-iarg] + strlen(argv[argc-iarg]) - 3;
-    origfilename = (char*)realloc(origfilename, (strlen(argv[argc-iarg]) + 5)*sizeof(char));
-    centredfilename = argv[argc-iarg];
-
-    strlcpy(origfilename,argv[argc-iarg], strlen(argv[argc-iarg]) - 3);
-
-    if (!strncmp(ext, "obj", 3)) {
-      strlcpy(&origfilename[strlen(argv[argc-iarg]) - 4],"-orig.obj", 10);
-      fprintf(stderr,"Moving '%s' to '%s'.\n",argv[argc-iarg], origfilename);fflush(stderr);
-      sprintf( cmd, "mv %s %s", argv[argc-iarg], origfilename );
-      int ret = system(cmd);
-      if (ret == -1) fprintf(stderr,"System command failed.");
-      else fprintf(stderr,"System command returned: %d\n",ret);
-      fprintf(stderr,"Translating centre to 0,0,0\n");fflush(stderr);
-      int res = SaveTranslatedObj(origfilename, centredfilename, mid);
-      if (res == -1) exit(EXIT_FAILURE);
-    } else {
-      fprintf(stderr, "Cannot load file '%s'.\n", argv[argc-iarg]);fflush(stderr);
-      exit(EXIT_FAILURE);
-    }
-    
-  }
-  fprintf(stderr, "Old midpoint: (%f,%f,%f)\n", mid.x, mid.y, mid.z);
-  fprintf(stderr, "New vertex range: (%f,%f,%f) -> (%f,%f,%f)\n",
-          minP.x-mid.x, minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x,
-          maxP.y-mid.y, maxP.z-mid.z);fflush(stderr);
-
-  fprintf(stdout, "BoundingBox %.6f %.6f %.6f %.6f %.6f %.6f \n", minP.x-mid.x,
-          minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x, maxP.y-mid.y,
-         maxP.z-mid.z);
-  free(origfilename);
-  exit(EXIT_SUCCESS);
-}
-
-
-
+int QUIET=0;
 
 int SaveTranslatedObj(char *filename_old,  char *filename_new, XYZ newCentre){
   
@@ -162,18 +65,17 @@ int SaveTranslatedObj(char *filename_old,  char *filename_new, XYZ newCentre){
 
   FILE *fin = fopen(filename_old, "r");
   if (fin == NULL){
-    fprintf(stderr,"SaveTranslatedObj: Original file %s could not be opened.\n",filename_old);
+    fprintf(stderr,"SaveTranslatedObj: Original file %s could not be opened.\n",filename_old);fflush(stderr);
     return -1;
   }
   FILE *fout = fopen(filename_new, "w");
   if (fout == NULL){
-    fprintf(stderr,"SaveTranslatedObj: Cannot write to file %s.\n", filename_new);
+    fprintf(stderr,"SaveTranslatedObj: Cannot write to file %s.\n", filename_new);fflush(stderr);
     return -1;
   }
-  
+  char *result = NULL;
   while (fgets(line, 400, fin)) {
     lcount++;
-    char *result = NULL;
     char space[] = " ";
     //fprintf(stderr,"%s\n",line);fflush(stderr);
     //fprintf(stderr, "token = %s\n", result);
@@ -196,9 +98,145 @@ int SaveTranslatedObj(char *filename_old,  char *filename_new, XYZ newCentre){
   fclose (fout);
   fclose (fin);
 
-  fprintf(stderr, "Read %d lines from '%s' to '%s'.\n", lcount, filename_old, filename_new);
-  fprintf(stderr, "Translated\t%d vertices to file \n", nverts);
+  if(QUIET==0){
+    fprintf(stderr, "Read %d lines from '%s' to '%s'.\n", lcount, filename_old, filename_new);
+    fprintf(stderr, "Translated\t%d vertices to file \n", nverts);
+}
   fflush(stderr);
   
   return 0;
 }
+
+
+int main(int argc, char **argv) {
+
+  int numObjFiles = argc-1;
+  if(strcmp(argv[1],"-q") == 0) {
+    QUIET=1;
+    numObjFiles-=1;
+  }
+  if (argc < 2) {
+    fprintf(stderr, "usage: %s objfilename[s]\n", argv[0]);
+    exit(EXIT_FAILURE);
+  }
+
+
+  XYZ minP, maxP;
+  
+  int iarg;
+  for (iarg = 1; iarg < numObjFiles; iarg++) {
+    OBJ_STRUCT *obj; // = loadObj(argv[argc -iarg], "null", 1, 1, 1, 1);
+    char *ext = argv[argc-iarg] + strlen(argv[argc-iarg]) - 3;
+    if (!strncmp(ext, "obj", 3)) {
+      obj = loadObj(argv[argc-iarg], "null", 1,1,1,1);
+    } else if (!strncmp(ext, "stl", 3)) {
+      obj = loadObjFromSTL(argv[argc-iarg], "null", 1,1,1,1);
+    } else {
+      fprintf(stderr, "Cannot load file '%s'.\n", argv[argc-iarg]);fflush(stderr);
+      exit(EXIT_FAILURE);
+    }
+    if(QUIET==0)
+      fprintf(stderr, "Found %d Obj files.\n",numObjFiles);
+    fflush(stderr);
+
+    if (iarg == 1) {
+      minP = obj->minP;
+      maxP = obj->maxP;
+    } else {
+      if (obj->minP.x < minP.x) {
+        minP.x = obj->minP.x;
+      }
+      if (obj->minP.y < minP.y) {
+        minP.y = obj->minP.y;
+      }
+      if (obj->minP.z < minP.z) {
+        minP.z = obj->minP.z;
+      }
+
+      if (obj->maxP.x > maxP.x) {
+        maxP.x = obj->maxP.x;
+      }
+      if (obj->maxP.y > maxP.y) {
+        maxP.y = obj->maxP.y;
+      }
+      if (obj->maxP.z > maxP.z) {
+        maxP.z = obj->maxP.z;
+      }
+      
+    }
+  }
+  // offset all model parts
+  XYZ mid = VectorAdd(minP, maxP);
+  mid = VectorMul(mid, 0.5);
+
+  fprintf(stderr, "OBJ vertex range: (%f,%f,%f) -> (%f,%f,%f)\n", minP.x, minP.y, minP.z,
+	  maxP.x, maxP.y, maxP.z);fflush(stderr);
+  fprintf(stderr, "OBJ vertex midpoint: (%f,%f,%f)\n", mid.x, mid.y, mid.z);fflush(stderr);
+
+  
+  if ( fabsf((float)mid.x) < 0.00001f &&
+       fabsf((float)mid.y) < 0.00001f &&
+       fabsf((float)mid.z) < 0.00001f) {
+    fprintf(stderr, "OBJ vertex midpoint already 0,0,0.\n");fflush(stderr);
+    fprintf(stdout, "No Changes.\nBoundingBox: %.6f %.6f %.6f %.6f %.6f %.6f \n",
+            minP.x, minP.y, minP.z,
+            maxP.x, maxP.y, maxP.z);
+    exit(EXIT_SUCCESS);
+  }
+  
+
+       char *origfilename= (char*)malloc(512*sizeof(char));
+       char *centredfilename = NULL; //= (char*)malloc(512*sizeof(char));
+  int res=0,ret=0;
+  fprintf(stderr, "Translating obj centre to origin....\n");  fflush(stderr);
+  for (iarg = 1; iarg < numObjFiles; iarg++) {
+    centredfilename = argv[argc-iarg];    
+    char *ext = centredfilename + strlen(centredfilename) - 3;
+    origfilename = (char*)realloc(origfilename, (strlen(centredfilename) + 5)*sizeof(char));
+    strlcpy(origfilename,centredfilename, strlen(centredfilename) - 3);
+
+    //    centredfilename = (char*)realloc(centredfilename, (strlen(argv[argc-iarg]))*sizeof(char));
+    //    strlcpy(centredfilename,argv[argc-iarg], strlen(argv[argc-iarg])+1);
+    
+
+    if (!strncmp(ext, "obj", 3)) {
+      strlcpy(&origfilename[strlen(centredfilename) - 4],"-orig.obj", 10);
+
+      if(QUIET==0) {
+        fprintf(stderr,"Moving '%s' to '%s'.\n",centredfilename, origfilename);
+      }
+      //Move file and force sync
+      sprintf( cmd, "mv -f \"%s\" \"%s\" ", centredfilename, origfilename );
+
+      if(QUIET==0) {
+        fprintf(stderr,"Cmd: %s\n",cmd);
+        fflush(stderr);
+      }
+      ret = system(cmd);
+      if (ret == -1) fprintf(stderr,"System command failed.");
+      else if (ret == 127) fprintf(stderr,"Execution of the shell failed.");
+      //else fprintf(stderr,"System command returned: %d\n",ret);
+
+      if(QUIET==0) {
+        fprintf(stderr,"\nTranslating centre to 0,0,0\n");fflush(stderr);
+      }
+      res = SaveTranslatedObj(origfilename, centredfilename, mid);
+      if (res == -1) exit(EXIT_FAILURE);
+    } else {
+      fprintf(stderr, "Cannot load file '%s'.\n", centredfilename); fflush(stderr);
+      exit(EXIT_FAILURE);
+    }
+  }
+  fprintf(stderr, "Old midpoint: (%f,%f,%f)\n", mid.x, mid.y, mid.z);
+  fprintf(stderr, "New vertex range: (%f,%f,%f) -> (%f,%f,%f)\n",
+          minP.x-mid.x, minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x,
+          maxP.y-mid.y, maxP.z-mid.z);fflush(stderr);
+  fprintf(stdout, "Format: XMIN YMIN ZMIN XMAX YMAX ZMAX \n"
+  fprintf(stdout, "BoundingBox: %.6f %.6f %.6f %.6f %.6f %.6f \n", minP.x-mid.x,
+          minP.y-mid.y, minP.z-mid.z, maxP.x-mid.x, maxP.y-mid.y,
+         maxP.z-mid.z);
+  if (origfilename) free(origfilename);
+  // if (centredfilename) free(centredfilename);
+  exit(EXIT_SUCCESS);
+}
+
